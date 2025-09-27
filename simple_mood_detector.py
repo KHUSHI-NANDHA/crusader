@@ -4,6 +4,9 @@ from collections import deque
 import threading
 import time
 from yolo_human_detector import YOLOHumanDetector
+from chaos_analyzer import ChaosAnalyzer
+from enhanced_chaos_analyzer import EnhancedChaosAnalyzer
+from advanced_chaos_detector import AdvancedChaosDetector
 
 class SimpleStudentMoodAnalyzer:
     def __init__(self, use_yolo=True):
@@ -58,6 +61,11 @@ class SimpleStudentMoodAnalyzer:
         # Mood detection based on facial features
         self.mood_history = deque(maxlen=30)  # Keep last 30 frames
         self.people_count_history = deque(maxlen=10)
+        
+        # Initialize advanced chaos analyzer
+        self.chaos_analyzer = ChaosAnalyzer()
+        self.enhanced_chaos_analyzer = EnhancedChaosAnalyzer()
+        self.advanced_chaos_detector = AdvancedChaosDetector()
         
         # Individual person tracking for chaos detection
         self.person_tracks = {}  # Track individual people and their chaos levels
@@ -280,8 +288,17 @@ class SimpleStudentMoodAnalyzer:
                 people_count = len(detections)
                 self.people_count_history.append(people_count)
                 
-                # Track people and detect chaos creators using YOLO
-                current_people, chaos_people = self.yolo_detector.track_humans(detections, frame, prev_frame)
+                # Track people using YOLO
+                current_people, _ = self.yolo_detector.track_humans(detections, frame, prev_frame)
+                
+                # Use advanced chaos detector for real chaos detection
+                current_people, clusters = self.advanced_chaos_detector.analyze_advanced_chaos(current_people, prev_frame, frame)
+                
+                # Get chaos report
+                chaos_report = self.advanced_chaos_detector.get_chaos_report()
+                
+                # Also use basic chaos analyzer for compatibility
+                current_people, chaos_people = self.chaos_analyzer.analyze_frame_chaos(current_people, prev_frame, frame)
                 
                 # Convert YOLO detections to face-like format for mood analysis
                 faces = [det['bbox'] for det in detections]
@@ -312,28 +329,57 @@ class SimpleStudentMoodAnalyzer:
                         print(f"Error processing face: {e}")
                         moods.append("unknown")
             
-            # Detect overall chaos level
-            chaos_level = self.detect_chaos_level(frame, prev_frame)
+            # Get overall chaos summary from the advanced analyzer
+            chaos_summary = self.chaos_analyzer.get_overall_chaos_summary()
+            
+            # Get advanced chaos report
+            advanced_chaos_report = self.advanced_chaos_detector.get_chaos_report()
+            
+            # Get enhanced activity summary
+            activity_summary = self.enhanced_chaos_analyzer.get_activity_summary()
             
             # Store mood data
             self.mood_history.append({
                 'moods': moods,
                 'people_count': people_count,
-                'chaos_level': chaos_level,
+                'chaos_level': chaos_summary['overall_chaos'],
                 'current_people': current_people,
                 'chaos_people': chaos_people,
+                'individual_activities': individual_activities if 'individual_activities' in locals() else {},
+                'cluster_activities': cluster_activities if 'cluster_activities' in locals() else {},
+                'clusters': clusters if 'clusters' in locals() else [],
                 'timestamp': time.time()
             })
             
             return {
                 'moods': moods,
                 'people_count': people_count,
-                'chaos_level': chaos_level,
+                'chaos_level': chaos_summary['overall_chaos'],
+                'chaos_level_name': chaos_summary['chaos_level'],
                 'current_people': current_people,
                 'chaos_people': chaos_people,
+                'chaos_creators_count': chaos_summary['chaos_creators_count'],
+                'chaos_percentage': chaos_summary['chaos_percentage'],
+                'individual_work_count': activity_summary['individual_work'],
+                'structured_group_work_count': activity_summary['structured_group_work'],
+                'structured_chaos_count': activity_summary['structured_chaos'],
+                'individual_chaos_count': activity_summary['individual_chaos'],
+                'calm_count': activity_summary['calm'],
+                'active_clusters': activity_summary['active_clusters'],
+                'individual_activities': individual_activities if 'individual_activities' in locals() else {},
+                'cluster_activities': cluster_activities if 'cluster_activities' in locals() else {},
+                # Advanced chaos detection results
+                'overall_chaos_status': advanced_chaos_report['overall_status'],
+                'chaos_clusters': advanced_chaos_report['chaos_clusters'],
+                'calm_clusters': advanced_chaos_report['calm_clusters'],
+                'individual_chaos_people': advanced_chaos_report['individual_chaos'],
+                'individual_calm_people': advanced_chaos_report['individual_calm'],
+                'chaos_people_count': advanced_chaos_report['chaos_people_count'],
+                'chaos_cluster_count': advanced_chaos_report['chaos_cluster_count'],
+                'clusters': clusters if 'clusters' in locals() else [],
                 'dominant_mood': self.get_dominant_mood(),
                 'average_people': self.get_average_people_count(),
-                'overall_chaos': self.get_overall_chaos_level()
+                'overall_chaos': chaos_summary['overall_chaos']
             }
         except Exception as e:
             print(f"Error in analyze_frame: {e}")
