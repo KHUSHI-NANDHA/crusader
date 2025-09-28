@@ -1,5 +1,6 @@
 
 import sys
+import tkinter as tk
 from simple_video_processor import SimpleVideoProcessor
 
 def main():
@@ -16,16 +17,23 @@ def main():
     print("Starting GUI application...")
     print()
     
+    # Global fail-safe to prevent hard exits
+    def excepthook(exc_type, exc_value, exc_traceback):
+        print(f"Global exception: {exc_type.__name__}: {exc_value}")
+        try:
+            tk.messagebox.showerror("Unexpected Error", f"{exc_type.__name__}: {exc_value}\nThe application will remain open.")
+        except Exception:
+            pass
+
+    sys.excepthook = excepthook
+
+    # Create and run the video processor
+    app = SimpleVideoProcessor()
     try:
-        # Create and run the video processor
-        app = SimpleVideoProcessor()
         app.run()
     except KeyboardInterrupt:
         print("\nApplication interrupted by user")
-        sys.exit(0)
-    except Exception as e:
-        print(f"Error starting application: {e}")
-        sys.exit(1)
+    # Never exit the process due to other exceptions
 
 if __name__ == "__main__":
     main()

@@ -11,15 +11,19 @@ from PIL import Image, ImageTk
 
 class SimpleVideoProcessor:
     def __init__(self):
-        # Set OpenCV to single-threaded mode to avoid threading conflicts
-        cv2.setNumThreads(1)
-        
         self.root = tk.Tk()
-        self.root.title("Student Mood & Chaos Detection System (YOLO Version) - Window stays open until you close it")
+        self.root.title("Student Mood & Chaos Detection System - Window stays open until YOU close it")
         self.root.geometry("1200x800")
+        # Reduce OpenCV/FFmpeg threading contention
+        try:
+            cv2.setNumThreads(1)
+        except Exception:
+            pass
         
         # Prevent window from closing accidentally
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # Keep window alive on callback errors
+        self.root.report_callback_exception = self.tk_error_handler
         
         self.analyzer = SimpleStudentMoodAnalyzer(use_yolo=True)
         self.attendance_tracker = AttendanceTracker()
@@ -30,6 +34,8 @@ class SimpleVideoProcessor:
         self.current_video_index = 0
         self.is_processing_all = False
         
+        # Minimal UI mode hides status and advanced chaos/activity widgets
+        self.minimal_ui = True
         self.setup_ui()
         
     def setup_ui(self):
@@ -90,32 +96,54 @@ class SimpleVideoProcessor:
         mood_label = ttk.Label(results_frame, textvariable=self.mood_var, font=("Arial", 14, "bold"))
         mood_label.grid(row=1, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
         
-        # Advanced Chaos Status
-        ttk.Label(results_frame, text="Chaos Status:").grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
+        # Advanced/chaos/activity widgets (created but optionally hidden)
+        chaos_status_label_text = ttk.Label(results_frame, text="Chaos Status:")
+        chaos_status_label_text.grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
         self.chaos_status_var = tk.StringVar(value="ANALYZING...")
         chaos_status_label = ttk.Label(results_frame, textvariable=self.chaos_status_var, font=("Arial", 14, "bold"))
         chaos_status_label.grid(row=2, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
-        
-        
-        # Analysis Status
-        ttk.Label(results_frame, text="Analysis Status:").grid(row=3, column=0, sticky=tk.W, pady=(10, 0))
+
+        chaos_clusters_label_text = ttk.Label(results_frame, text="Chaos Clusters:")
+        chaos_clusters_label_text.grid(row=3, column=0, sticky=tk.W, pady=(10, 0))
+        self.chaos_clusters_var = tk.StringVar(value="0")
+        chaos_clusters_value = ttk.Label(results_frame, textvariable=self.chaos_clusters_var, font=("Arial", 14, "bold"), foreground="red")
+        chaos_clusters_value.grid(row=3, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
+
+        chaos_people_label_text = ttk.Label(results_frame, text="Chaos People:")
+        chaos_people_label_text.grid(row=4, column=0, sticky=tk.W, pady=(10, 0))
+        self.chaos_people_var = tk.StringVar(value="0")
+        chaos_people_value = ttk.Label(results_frame, textvariable=self.chaos_people_var, font=("Arial", 14, "bold"), foreground="red")
+        chaos_people_value.grid(row=4, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
+
+        analysis_status_label_text = ttk.Label(results_frame, text="Analysis Status:")
+        analysis_status_label_text.grid(row=5, column=0, sticky=tk.W, pady=(10, 0))
         self.analysis_status_var = tk.StringVar(value="Collecting data...")
-        ttk.Label(results_frame, textvariable=self.analysis_status_var, font=("Arial", 10)).grid(row=3, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
-        
-        # Activity Type
-        ttk.Label(results_frame, text="Activity Type:").grid(row=4, column=0, sticky=tk.W, pady=(10, 0))
-        self.activity_type_var = tk.StringVar(value="Unknown")
-        ttk.Label(results_frame, textvariable=self.activity_type_var, font=("Arial", 12, "bold")).grid(row=4, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
-        
-        # Group Work Indicator
-        ttk.Label(results_frame, text="Group Work:").grid(row=5, column=0, sticky=tk.W, pady=(10, 0))
-        self.group_work_var = tk.StringVar(value="0%")
-        ttk.Label(results_frame, textvariable=self.group_work_var, font=("Arial", 10)).grid(row=5, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
-        
-        # Structured Activity Indicator
-        ttk.Label(results_frame, text="Structured Activity:").grid(row=6, column=0, sticky=tk.W, pady=(10, 0))
-        self.structured_activity_var = tk.StringVar(value="0%")
-        ttk.Label(results_frame, textvariable=self.structured_activity_var, font=("Arial", 10)).grid(row=6, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
+        analysis_status_value = ttk.Label(results_frame, textvariable=self.analysis_status_var, font=("Arial", 10))
+        analysis_status_value.grid(row=5, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
+
+        individual_work_label_text = ttk.Label(results_frame, text="Individual Work:")
+        individual_work_label_text.grid(row=6, column=0, sticky=tk.W, pady=(10, 0))
+        self.individual_work_var = tk.StringVar(value="0")
+        individual_work_value = ttk.Label(results_frame, textvariable=self.individual_work_var, font=("Arial", 10))
+        individual_work_value.grid(row=6, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
+
+        group_work_label_text = ttk.Label(results_frame, text="Group Work:")
+        group_work_label_text.grid(row=7, column=0, sticky=tk.W, pady=(5, 0))
+        self.group_work_var = tk.StringVar(value="0")
+        group_work_value = ttk.Label(results_frame, textvariable=self.group_work_var, font=("Arial", 10))
+        group_work_value.grid(row=7, column=1, sticky=tk.W, padx=(10, 0), pady=(5, 0))
+
+        structured_chaos_label_text = ttk.Label(results_frame, text="Structured Chaos:")
+        structured_chaos_label_text.grid(row=8, column=0, sticky=tk.W, pady=(5, 0))
+        self.structured_chaos_var = tk.StringVar(value="0")
+        structured_chaos_value = ttk.Label(results_frame, textvariable=self.structured_chaos_var, font=("Arial", 10), foreground="red")
+        structured_chaos_value.grid(row=8, column=1, sticky=tk.W, padx=(10, 0), pady=(5, 0))
+
+        active_clusters_label_text = ttk.Label(results_frame, text="Active Clusters:")
+        active_clusters_label_text.grid(row=9, column=0, sticky=tk.W, pady=(5, 0))
+        self.clusters_var = tk.StringVar(value="0")
+        clusters_value = ttk.Label(results_frame, textvariable=self.clusters_var, font=("Arial", 10))
+        clusters_value.grid(row=9, column=1, sticky=tk.W, padx=(10, 0), pady=(5, 0))
         
         # Attendance tracking section
         attendance_frame = ttk.LabelFrame(main_frame, text="Attendance Tracking", padding="10")
@@ -124,8 +152,7 @@ class SimpleVideoProcessor:
         # Attendance controls (automatic lecture management)
         ttk.Button(attendance_frame, text="View Attendance Report", command=self.view_attendance_report).grid(row=0, column=0, padx=(0, 10))
         ttk.Button(attendance_frame, text="Export Report", command=self.export_attendance_report).grid(row=0, column=1, padx=(0, 10))
-        ttk.Button(attendance_frame, text="Activity Analysis", command=self.show_activity_analysis).grid(row=0, column=2, padx=(0, 10))
-        ttk.Button(attendance_frame, text="Clear All Data", command=self.clear_attendance_data).grid(row=0, column=3, padx=(0, 10))
+        ttk.Button(attendance_frame, text="Clear All Data", command=self.clear_attendance_data).grid(row=0, column=2, padx=(0, 10))
         
         # Current session info (automatic)
         self.current_session_var = tk.StringVar(value="Auto-managed")
@@ -138,11 +165,11 @@ class SimpleVideoProcessor:
         ttk.Label(attendance_frame, textvariable=self.people_in_session_var, font=("Arial", 10)).grid(row=2, column=1, sticky=tk.W, padx=(10, 0), pady=(5, 0))
         
         # Status
-        ttk.Label(results_frame, text="Status:").grid(row=10, column=0, sticky=tk.W, pady=(10, 0))
-        self.status_var = tk.StringVar(value="Ready - Sessions auto-managed, window stays open")
-        ttk.Label(results_frame, textvariable=self.status_var, font=("Arial", 10)).grid(row=10, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
-        
-        # Add restart button for error recovery
+        # Status is not shown in minimal UI, but keep variable for internal messaging
+        self.status_var = tk.StringVar(value="Ready")
+        if not self.minimal_ui:
+            ttk.Label(results_frame, text="Status:").grid(row=10, column=0, sticky=tk.W, pady=(10, 0))
+            ttk.Label(results_frame, textvariable=self.status_var, font=("Arial", 10)).grid(row=10, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
         
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
@@ -153,6 +180,21 @@ class SimpleVideoProcessor:
         video_display_frame.columnconfigure(0, weight=1)
         video_display_frame.rowconfigure(0, weight=1)
         results_frame.columnconfigure(1, weight=1)
+
+        # Hide advanced widgets if minimal UI is requested
+        if self.minimal_ui:
+            for w in [chaos_status_label_text, chaos_status_label,
+                      chaos_clusters_label_text, chaos_clusters_value,
+                      chaos_people_label_text, chaos_people_value,
+                      analysis_status_label_text, analysis_status_value,
+                      individual_work_label_text, individual_work_value,
+                      group_work_label_text, group_work_value,
+                      structured_chaos_label_text, structured_chaos_value,
+                      active_clusters_label_text, clusters_value]:
+                try:
+                    w.grid_remove()
+                except Exception:
+                    pass
         
     def browse_video(self):
         """Browse for single video file"""
@@ -161,19 +203,8 @@ class SimpleVideoProcessor:
             filetypes=[("MP4 files", "*.mp4"), ("All files", "*.*")]
         )
         if file_path:
-            # Clear all previous data when selecting new video
-            self.attendance_tracker.clear_all_data()
-            self.clear_session_data()
-            
-            # Set new video
             self.video_path_var.set(file_path)
             self.current_video = file_path
-            
-            # Reset status
-            self.status_var.set("Selected new video - previous data cleared")
-            
-            print(f"📁 Selected new video: {os.path.basename(file_path)}")
-            print("🗑️ Previous data automatically cleared for fresh start")
     
     def browse_multiple_videos(self):
         """Browse for multiple video files"""
@@ -185,20 +216,10 @@ class SimpleVideoProcessor:
             ]
         )
         if filenames:
-            # Clear all previous data when selecting new videos
-            self.attendance_tracker.clear_all_data()
-            self.clear_session_data()
-            
-            # Set new video list
             self.video_list = list(filenames)
             self.current_video_index = 0
             self.update_video_list_display()
-            
-            # Reset status
-            self.status_var.set(f"Selected {len(filenames)} new videos - previous data cleared")
-            
             print(f"📁 Selected {len(filenames)} videos for processing")
-            print("🗑️ Previous data automatically cleared for fresh start")
     
     def update_video_list_display(self):
         """Update the video list display"""
@@ -277,9 +298,6 @@ class SimpleVideoProcessor:
         self.current_video = current_video
         self.video_path_var.set(current_video)
         
-        # Clear all previous data for fresh start
-        self.clear_session_data()
-        
         # Start new lecture for this video
         self.attendance_tracker.start_new_session(current_video)
         self.current_session_var.set(f"Session {self.current_video_index + 1}: {os.path.basename(current_video)}")
@@ -297,17 +315,14 @@ class SimpleVideoProcessor:
         if not self.is_processing_all or self.current_video_index >= len(self.video_list):
             # Finished processing all videos
             self.is_processing_all = False
-            self.status_var.set("All videos processed - attendance tracking complete")
-            messagebox.showinfo("Processing Complete", "All videos have been processed!\nCheck the attendance report for results.")
+            self.status_var.set("All videos processed - window stays open until you close it")
+            print("✅ All videos processed! Window stays open - you can view reports or process more videos.")
             return
         
         # Get current video
         current_video = self.video_list[self.current_video_index]
         self.current_video = current_video
         self.video_path_var.set(current_video)
-        
-        # Clear all previous data for fresh start
-        self.clear_session_data()
         
         # Start new lecture for this video
         self.attendance_tracker.start_new_session(current_video)
@@ -330,10 +345,7 @@ class SimpleVideoProcessor:
         if self.is_processing:
             messagebox.showwarning("Warning", "Processing is already running")
             return
-        
-        # Clear all previous data for fresh start
-        self.clear_session_data()
-        
+            
         self.is_processing = True
         self.status_var.set("Processing...")
         
@@ -345,14 +357,11 @@ class SimpleVideoProcessor:
     def stop_processing(self):
         """Stop video processing"""
         self.is_processing = False
-        
-        # Properly release video capture
-        if self.cap:
-            try:
+        try:
+            if self.cap:
                 self.cap.release()
-            except:
-                pass  # Ignore release errors
-            self.cap = None
+        except Exception:
+            pass
         
         # If processing multiple videos automatically, end current lecture and move to next
         if self.is_processing_all:
@@ -362,13 +371,13 @@ class SimpleVideoProcessor:
             # Move to next video
             self.current_video_index += 1
             if self.current_video_index < len(self.video_list):
-                # Process next video after a longer delay to avoid threading conflicts
-                self.root.after(2000, self.process_next_video)
+                # Process next video after a short delay
+                self.root.after(1000, self.process_next_video)
             else:
                 # Finished all videos
                 self.is_processing_all = False
-                self.status_var.set("All videos processed - attendance tracking complete")
-                messagebox.showinfo("Processing Complete", "All videos have been processed!\nCheck the attendance report for results.")
+                self.status_var.set("All videos processed - window stays open until you close it")
+                print("✅ All videos processed! Window stays open - you can view reports or process more videos.")
         else:
             # Manual control - just stop, don't move to next video
             self.status_var.set("Stopped - Use Next/Previous buttons to navigate")
@@ -377,20 +386,19 @@ class SimpleVideoProcessor:
         """Process video file"""
         try:
             print(f"Opening video: {video_path}")
-            
-            # Set OpenCV threading to single thread to avoid conflicts
-            cv2.setNumThreads(1)
-            
-            # Create new VideoCapture with proper backend
+            # Prefer FFmpeg backend, fall back if unavailable
             self.cap = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
-            if not self.cap.isOpened():
-                # Try with default backend if FFMPEG fails
+            if not self.cap or not self.cap.isOpened():
                 self.cap = cv2.VideoCapture(video_path)
-                if not self.cap.isOpened():
-                    error_msg = "Could not open video file. Please check if the file exists and is a valid video format."
-                    print(error_msg)
-                    messagebox.showerror("Error", error_msg)
-                    return
+            if not self.cap.isOpened():
+                error_msg = "Could not open video file. Please check if the file exists and is a valid video format."
+                print(error_msg)
+                # Do not call Tk from background thread
+                try:
+                    self.root.after(0, lambda: messagebox.showerror("Error", error_msg))
+                except Exception:
+                    pass
+                return
                 
             # Get video properties
             fps = self.cap.get(cv2.CAP_PROP_FPS)
@@ -404,14 +412,9 @@ class SimpleVideoProcessor:
                 ret, frame = self.cap.read()
                 if not ret:
                     print("End of video reached")
-                    # End of video, restart or stop
-                    if self.is_processing:
-                        print("Restarting video...")
-                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Restart video
-                        prev_frame = None  # Reset previous frame
-                        continue
-                    else:
-                        break
+                    # Stop at end-of-video to avoid FFmpeg async_lock issues from rapid looping
+                    self.is_processing = False
+                    break
                 
                 try:
                     # Analyze frame
@@ -481,8 +484,7 @@ class SimpleVideoProcessor:
                         print(f"Processed {frame_count} frames")
                     
                 except Exception as e:
-                    print(f"⚠️ Error processing frame {frame_count} (continuing): {e}")
-                    # Continue processing instead of crashing
+                    print(f"Error processing frame {frame_count}: {e}")
                     continue
                 
                 # No delay for maximum speed
@@ -490,17 +492,15 @@ class SimpleVideoProcessor:
                 
         except Exception as e:
             error_msg = f"Error processing video: {str(e)}"
-            print(f"⚠️ Video processing error (continuing): {error_msg}")
-            # Don't show error dialog for known threading issues, just log them
-            if "async_lock" not in str(e) and "pthread_frame" not in str(e) and "cascadedetect" not in str(e):
-                messagebox.showerror("Error", error_msg)
-            # Continue processing instead of crashing
+            print(error_msg)
+            # Avoid Tk calls off the main thread
+            try:
+                self.root.after(0, lambda: messagebox.showerror("Error", error_msg))
+            except Exception:
+                pass
         finally:
             if self.cap:
-                try:
-                    self.cap.release()
-                except:
-                    pass  # Ignore release errors
+                self.cap.release()
             self.is_processing = False
             
             # Handle multiple video processing
@@ -516,209 +516,40 @@ class SimpleVideoProcessor:
                 else:
                     # Finished all videos
                     self.is_processing_all = False
-                    self.status_var.set("All videos processed - attendance tracking complete")
-                    messagebox.showinfo("Processing Complete", "All videos have been processed!\nCheck the attendance report for results.")
+                    self.status_var.set("All videos processed - window stays open until you close it")
+                    print("✅ All videos processed! Window stays open - you can view reports or process more videos.")
             else:
                 # End current session for single video processing
                 if self.attendance_tracker.current_session_id:
                     self.attendance_tracker.end_session()
                     self.current_session_var.set("Auto-managed")
-                    self.status_var.set("Video processed - session ended automatically")
+                    self.status_var.set("Video finished - Window stays open until YOU close it")
                 else:
-                    self.status_var.set("Ready")
+                    self.status_var.set("Video finished - Window stays open until YOU close it")
             
             print("Video processing stopped")
             
     def draw_analysis_on_frame(self, frame, analysis):
-        """Draw analysis results on the frame"""
+        """Draw analysis results on the frame (minimal: only people count, mood, and boxes)"""
         height, width = frame.shape[:2]
-        
-        # Draw people count with better visibility
+
+        # Draw people count
         people_count = analysis['people_count']
-        cv2.putText(frame, f"People Detected: {people_count}", 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 3)
-        
-        # Add background rectangle for better visibility
-        cv2.rectangle(frame, (5, 5), (300, 50), (0, 0, 0), -1)
-        cv2.putText(frame, f"People Detected: {people_count}", 
-                   (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-        
+        cv2.rectangle(frame, (5, 5), (320, 80), (0, 0, 0), -1)
+        cv2.putText(frame, f"People: {people_count}", (12, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
         # Draw dominant mood
+        mood_text = analysis['dominant_mood'].upper()
         mood_color = self.get_mood_color(analysis['dominant_mood'])
-        cv2.putText(frame, f"Mood: {analysis['dominant_mood'].upper()}", 
-                   (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, mood_color, 2)
-        
-        # Draw advanced chaos status
-        chaos_status = analysis.get('overall_chaos_status', 'ANALYZING')
-        chaos_clusters = analysis.get('chaos_cluster_count', 0)
-        chaos_people = analysis.get('chaos_people_count', 0)
-        
-        if chaos_status == 'CHAOS':
-            chaos_color = (0, 0, 255)  # Red
-            status_text = f"CHAOS DETECTED!"
-        elif chaos_status == 'CALM':
-            chaos_color = (0, 255, 0)  # Green
-            status_text = f"All Calm"
-        else:
-            chaos_color = (255, 255, 0)  # Yellow
-            status_text = f"Analyzing..."
-        
-        cv2.putText(frame, f"Status: {status_text}", 
-                   (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, chaos_color, 2)
-        cv2.putText(frame, f"Chaos Clusters: {chaos_clusters}", 
-                   (10, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.7, chaos_color, 2)
-        cv2.putText(frame, f"Chaos People: {chaos_people}", 
-                   (10, 170), cv2.FONT_HERSHEY_SIMPLEX, 0.7, chaos_color, 2)
-        
-        # Add real-time chaos alert overlay
-        if chaos_status == 'CHAOS':
-            # Add red alert overlay
-            overlay = frame.copy()
-            cv2.rectangle(overlay, (0, 0), (frame.shape[1], 60), (0, 0, 255), -1)
-            cv2.addWeighted(overlay, 0.3, frame, 0.7, 0, frame)
-            
-            # Add flashing "CHAOS DETECTED" text
-            flash_alpha = 0.8 * (1 + np.sin(time.time() * 15) / 2)
-            cv2.putText(frame, "⚠️ CHAOS DETECTED! ⚠️", 
-                       (frame.shape[1]//2 - 150, 40), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-            
-            # Add countdown or timestamp
-            timestamp = time.strftime("%H:%M:%S")
-            cv2.putText(frame, f"Time: {timestamp}", 
-                       (10, frame.shape[0] - 20), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-        
-        # Draw activity counts
-        individual_work = analysis.get('individual_work_count', 0)
-        group_work = analysis.get('structured_group_work_count', 0)
-        structured_chaos = analysis.get('structured_chaos_count', 0)
-        clusters = analysis.get('active_clusters', 0)
-        
-        cv2.putText(frame, f"Individual Work: {individual_work}", 
-                   (10, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.putText(frame, f"Group Work: {group_work}", 
-                   (10, 180), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2)
-        cv2.putText(frame, f"Structured Chaos: {structured_chaos}", 
-                   (10, 210), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        cv2.putText(frame, f"Active Clusters: {clusters}", 
-                   (10, 240), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
-        
-        # Draw mood distribution
-        mood_text = f"Avg People: {int(analysis['average_people'])}"
-        cv2.putText(frame, mood_text, 
-                   (10, 270), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        # Draw individual face rectangles with different colors for chaos creators
+        cv2.putText(frame, f"Mood: {mood_text}", (12, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.9, mood_color, 2)
+
+        # Draw bounding boxes for current people (simple style)
         current_people = analysis.get('current_people', [])
-        chaos_people = analysis.get('chaos_people', [])
-        
-        # Get advanced chaos data
-        chaos_clusters = analysis.get('chaos_clusters', [])
-        individual_chaos_people = analysis.get('individual_chaos_people', [])
-        chaos_status = analysis.get('overall_chaos_status', 'ANALYZING')
-        
-        # Draw debug info
-        debug_text = f"Status: {chaos_status} | People: {len(current_people)}"
-        cv2.putText(frame, debug_text, 
-                   (10, 220), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
-        
-        # Create sets for chaos detection
-        chaos_ids = {person['id'] for person in chaos_people}
-        individual_chaos_ids = {person['person_id'] for person in individual_chaos_people}
-        
-        # Get cluster information for highlighting
-        clusters = analysis.get('clusters', [])
-        chaos_cluster_ids = {cluster['cluster_id'] for cluster in chaos_clusters}
-        
         for person in current_people:
             x, y, w, h = person['rect']
-            person_id = person['id']
-            chaos_level = person.get('chaos_level', 0)
-            chaos_level_name = person.get('chaos_level_name', 'CALM')
-            movement_type = person.get('movement_type', 'STATIONARY')
-            activity_type = person.get('activity_type', 'CALM')
-            activity_name = person.get('activity_name', 'Calm Activity')
-            movement_speed = person.get('movement_speed', 0)
-            
-            # Check if person is in chaos (from advanced detection)
-            is_individual_chaos = person_id in individual_chaos_ids
-            is_basic_chaos = person_id in chaos_ids
-            
-            # Determine if person is chaotic
-            is_chaotic = is_individual_chaos or is_basic_chaos
-            
-            # Show activity type and speed
-            cv2.putText(frame, f"{activity_name}", 
-                       (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-            cv2.putText(frame, f"Speed: {movement_speed:.1f}", 
-                       (x, y+h+40), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
-            
-            # Choose color and thickness based on chaos detection
-            if is_chaotic:
-                # RED for chaotic people - real-time chaos detection
-                color = (0, 0, 255)  # Red
-                thickness = 4
-                chaos_label = "CHAOS!"
-            elif activity_type == 'INDIVIDUAL_WORK':
-                color = (0, 255, 0)  # Green for individual work
-                thickness = 2
-                chaos_label = "WORK"
-            elif activity_type == 'STRUCTURED_GROUP_WORK':
-                color = (255, 255, 0)  # Yellow for group work
-                thickness = 2
-                chaos_label = "GROUP"
-            else:
-                color = (255, 0, 0)  # Blue for calm activity
-                thickness = 2
-                chaos_label = "CALM"
-            
-            # Draw rectangle with chaos-based color
-            cv2.rectangle(frame, (x, y), (x+w, y+h), color, thickness)
-            
-            # Add special effects for chaotic people
-            if is_chaotic:
-                # Add pulsing red effect for chaotic people
-                pulse = int(30 * (1 + np.sin(time.time() * 15) / 2))
-                cv2.rectangle(frame, (x-pulse//8, y-pulse//8), (x+w+pulse//8, y+h+pulse//8), (0, 0, 255), 2)
-                
-                # Add flashing background
-                flash_alpha = 0.3 * (1 + np.sin(time.time() * 20) / 2)
-                overlay = frame.copy()
-                cv2.rectangle(overlay, (x, y), (x+w, y+h), (0, 0, 255), -1)
-                cv2.addWeighted(overlay, flash_alpha, frame, 1 - flash_alpha, 0, frame)
-            
-            # Draw chaos label
-            cv2.putText(frame, chaos_label, 
-                       (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-            
-            # Draw person ID and dummy name
-            dummy_name = person.get('dummy_name', f'Person {person_id}')
-            cv2.putText(frame, f"ID:{person_id}", 
-                       (x, y-30), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
-            cv2.putText(frame, dummy_name, 
-                       (x, y-50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
-        
-        # Highlight chaotic clusters
-        for cluster in clusters:
-            cluster_id = cluster.get('id', '')
-            if cluster_id in chaos_cluster_ids:
-                # Get cluster center and size
-                center = cluster.get('center', (0, 0))
-                cluster_size = cluster.get('size', 0)
-                
-                # Draw cluster boundary
-                cluster_radius = 80 + cluster_size * 10
-                cv2.circle(frame, (int(center[0]), int(center[1])), cluster_radius, (0, 0, 255), 3)
-                
-                # Add pulsing effect for chaotic clusters
-                pulse = int(20 * (1 + np.sin(time.time() * 12) / 2))
-                cv2.circle(frame, (int(center[0]), int(center[1])), cluster_radius + pulse, (0, 0, 255), 2)
-                
-                # Draw cluster label
-                cv2.putText(frame, f"CHAOTIC CLUSTER", 
-                           (int(center[0]) - 60, int(center[1]) - cluster_radius - 10), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            person_id = person.get('id', 0)
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 200, 255), 2)
+            cv2.putText(frame, f"ID:{person_id}", (x, y-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
     def get_mood_color(self, mood):
         """Get color for mood display"""
@@ -747,40 +578,21 @@ class SimpleVideoProcessor:
         """Update UI with analysis results"""
         self.people_count_var.set(str(analysis['people_count']))
         self.mood_var.set(analysis['dominant_mood'].upper())
-        
-        # Update advanced chaos status
-        chaos_status = analysis.get('overall_chaos_status', 'ANALYZING')
-        self.chaos_status_var.set(chaos_status)
-        
-        # Update activity type
-        activity_type = analysis.get('activity_type', 'unknown')
-        self.activity_type_var.set(activity_type.replace('_', ' ').title())
-        
-        # Update activity summary
-        activity_summary = analysis.get('activity_summary', {})
-        if activity_summary:
-            # Calculate group work percentage
-            group_work_count = (activity_summary.get('structured_group_work', 0) + 
-                              activity_summary.get('unstructured_group_work', 0) +
-                              activity_summary.get('distractive_group_chaos', 0))
-            total_periods = activity_summary.get('total_periods', 1)
-            group_work_percentage = (group_work_count / total_periods) * 100 if total_periods > 0 else 0
-            self.group_work_var.set(f"{group_work_percentage:.1f}%")
-            
-            # Calculate structured activity percentage
-            structured_count = (activity_summary.get('structured_group_work', 0) + 
-                              activity_summary.get('structured_individual_work', 0))
-            structured_percentage = (structured_count / total_periods) * 100 if total_periods > 0 else 0
-            self.structured_activity_var.set(f"{structured_percentage:.1f}%")
-        
-        # Update analysis status
-        if chaos_status == 'ANALYZING':
-            self.analysis_status_var.set("Collecting data...")
-        elif chaos_status == 'CHAOS':
-            self.analysis_status_var.set("CHAOS DETECTED!")
-        else:
-            self.analysis_status_var.set("All calm")
-        
+        if not self.minimal_ui:
+            chaos_status = analysis.get('overall_chaos_status', 'ANALYZING')
+            self.chaos_status_var.set(chaos_status)
+            self.chaos_clusters_var.set(str(analysis.get('chaos_cluster_count', 0)))
+            self.chaos_people_var.set(str(analysis.get('chaos_people_count', 0)))
+            if chaos_status == 'ANALYZING':
+                self.analysis_status_var.set("Collecting data...")
+            elif chaos_status == 'CHAOS':
+                self.analysis_status_var.set("CHAOS DETECTED!")
+            else:
+                self.analysis_status_var.set("All calm")
+            self.individual_work_var.set(str(analysis.get('individual_work_count', 0)))
+            self.group_work_var.set(str(analysis.get('structured_group_work_count', 0)))
+            self.structured_chaos_var.set(str(analysis.get('structured_chaos_count', 0)))
+            self.clusters_var.set(str(analysis.get('active_clusters', 0)))
         
     def display_frame(self, frame):
         """Display frame in the UI"""
@@ -848,143 +660,6 @@ class SimpleVideoProcessor:
         text_widget.insert(tk.END, report_text)
         text_widget.config(state=tk.DISABLED)
     
-    def show_activity_analysis(self):
-        """Show detailed activity analysis window"""
-        # Get activity summary from analyzer
-        activity_summary = self.analyzer.get_activity_summary()
-        
-        # Create new window
-        activity_window = tk.Toplevel(self.root)
-        activity_window.title("Classroom Activity Analysis")
-        activity_window.geometry("600x500")
-        activity_window.resizable(True, True)
-        
-        # Create main frame
-        main_frame = ttk.Frame(activity_window, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title
-        title_label = ttk.Label(main_frame, text="📊 CLASSROOM ACTIVITY ANALYSIS", font=("Arial", 16, "bold"))
-        title_label.pack(pady=(0, 20))
-        
-        # Create notebook for different analysis views
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Activity Distribution Tab
-        distribution_frame = ttk.Frame(notebook)
-        notebook.add(distribution_frame, text="Activity Distribution")
-        
-        # Activity summary
-        ttk.Label(distribution_frame, text="Activity Type Distribution:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
-        
-        # Create activity breakdown
-        activities = [
-            ("Structured Group Work", "structured_group_work", "green"),
-            ("Unstructured Group Work", "unstructured_group_work", "orange"),
-            ("Structured Individual Work", "structured_individual_work", "blue"),
-            ("Unstructured Individual Work", "unstructured_individual_work", "yellow"),
-            ("Distractive Group Chaos", "distractive_group_chaos", "red"),
-            ("Distractive Individual Chaos", "distractive_individual_chaos", "red"),
-            ("No Activity", "no_activity", "gray")
-        ]
-        
-        for activity_name, activity_key, color in activities:
-            count = activity_summary.get(activity_key, 0)
-            percentage = activity_summary.get(f"{activity_key}_percentage", 0)
-            
-            frame = ttk.Frame(distribution_frame)
-            frame.pack(fill=tk.X, pady=2)
-            
-            ttk.Label(frame, text=f"{activity_name}:", width=25, anchor="w").pack(side=tk.LEFT)
-            ttk.Label(frame, text=f"{count} periods", width=10).pack(side=tk.LEFT, padx=(10, 5))
-            ttk.Label(frame, text=f"({percentage:.1f}%)", width=10, foreground=color).pack(side=tk.LEFT)
-        
-        # Productivity Analysis Tab
-        productivity_frame = ttk.Frame(notebook)
-        notebook.add(productivity_frame, text="Productivity Analysis")
-        
-        ttk.Label(productivity_frame, text="Productivity Metrics:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
-        
-        # Calculate productivity metrics
-        total_periods = activity_summary.get('total_periods', 0)
-        if total_periods > 0:
-            productive_work = (activity_summary.get('structured_group_work', 0) + 
-                             activity_summary.get('structured_individual_work', 0))
-            group_work = (activity_summary.get('structured_group_work', 0) + 
-                         activity_summary.get('unstructured_group_work', 0))
-            chaos_periods = (activity_summary.get('distractive_group_chaos', 0) + 
-                           activity_summary.get('distractive_individual_chaos', 0))
-            
-            productive_percentage = (productive_work / total_periods) * 100
-            group_work_percentage = (group_work / total_periods) * 100
-            chaos_percentage = (chaos_periods / total_periods) * 100
-            
-            metrics = [
-                ("Total Analysis Periods:", f"{total_periods}"),
-                ("Productive Work:", f"{productive_percentage:.1f}%"),
-                ("Group Work:", f"{group_work_percentage:.1f}%"),
-                ("Chaos/Distraction:", f"{chaos_percentage:.1f}%"),
-                ("", ""),
-                ("Recommendations:", ""),
-            ]
-            
-            for metric_name, metric_value in metrics:
-                if metric_name == "Recommendations:":
-                    ttk.Label(productivity_frame, text=metric_name, font=("Arial", 10, "bold")).pack(pady=(10, 5), anchor="w")
-                    
-                    # Add recommendations based on analysis
-                    recommendations = []
-                    if chaos_percentage > 30:
-                        recommendations.append("• High chaos levels detected - consider classroom management strategies")
-                    if group_work_percentage < 20:
-                        recommendations.append("• Low group work activity - encourage collaborative learning")
-                    if productive_percentage < 50:
-                        recommendations.append("• Low structured activity - consider more guided instruction")
-                    if group_work_percentage > 70 and chaos_percentage < 10:
-                        recommendations.append("• Excellent group work environment - maintain current approach")
-                    
-                    for rec in recommendations:
-                        ttk.Label(productivity_frame, text=rec, wraplength=500, justify="left").pack(anchor="w", pady=2)
-                else:
-                    frame = ttk.Frame(productivity_frame)
-                    frame.pack(fill=tk.X, pady=2)
-                    ttk.Label(frame, text=metric_name, width=25, anchor="w").pack(side=tk.LEFT)
-                    ttk.Label(frame, text=metric_value, font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(10, 0))
-        else:
-            ttk.Label(productivity_frame, text="No activity data available yet. Process some video to see analysis.", 
-                     foreground="gray").pack(pady=20)
-        
-        # Timeline Tab
-        timeline_frame = ttk.Frame(notebook)
-        notebook.add(timeline_frame, text="Activity Timeline")
-        
-        ttk.Label(timeline_frame, text="Recent Activity Timeline:", font=("Arial", 12, "bold")).pack(pady=(10, 5))
-        
-        # Show recent activity history
-        if hasattr(self.analyzer, 'activity_history') and self.analyzer.activity_history:
-            timeline_text = tk.Text(timeline_frame, height=15, width=70, wrap=tk.WORD)
-            timeline_scrollbar = ttk.Scrollbar(timeline_frame, orient=tk.VERTICAL, command=timeline_text.yview)
-            timeline_text.configure(yscrollcommand=timeline_scrollbar.set)
-            
-            timeline_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            timeline_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            # Create timeline text
-            timeline_content = "Recent Activity Sequence:\n" + "="*50 + "\n\n"
-            
-            for i, activity in enumerate(reversed(list(self.analyzer.activity_history)[-50:]), 1):
-                activity_display = activity.replace('_', ' ').title()
-                timeline_content += f"{i:2d}. {activity_display}\n"
-            
-            timeline_text.insert(tk.END, timeline_content)
-            timeline_text.config(state=tk.DISABLED)
-        else:
-            ttk.Label(timeline_frame, text="No timeline data available yet.", foreground="gray").pack(pady=20)
-        
-        # Close button
-        ttk.Button(main_frame, text="Close", command=activity_window.destroy).pack(pady=(20, 0))
-    
     def export_attendance_report(self):
         """Export attendance report to file"""
         filename = filedialog.asksaveasfilename(
@@ -995,95 +670,46 @@ class SimpleVideoProcessor:
             self.attendance_tracker.export_attendance_report(filename)
             messagebox.showinfo("Export Complete", f"Attendance report exported to:\n{filename}")
     
-    def clear_session_data(self):
-        """Clear all session data for fresh video processing"""
-        # Clear analyzer data
-        if hasattr(self.analyzer, 'reset_session'):
-            self.analyzer.reset_session()
-        
-        # Reset UI variables to show fresh state
-        self.people_count_var.set("0")
-        self.mood_var.set("Unknown")
-        self.chaos_status_var.set("ANALYZING...")
-        self.analysis_status_var.set("Starting fresh analysis...")
-        self.activity_type_var.set("Unknown")
-        self.group_work_var.set("0%")
-        self.structured_activity_var.set("0%")
-        self.people_in_session_var.set("0 people")
-        
-        # Clear video display
-        self.video_label.config(image='', text="No video loaded", background="black", foreground="white")
-        
-        print("🧹 Session data cleared for fresh start")
-    
     def clear_attendance_data(self):
         """Clear all attendance data for a fresh start"""
-        if messagebox.askyesno("Clear Data", "Are you sure you want to clear all attendance data?\nThis will remove ALL previous session data and start fresh."):
-            # Clear all data completely
+        if messagebox.askyesno("Clear Data", "Are you sure you want to clear all attendance data?\nThis action cannot be undone."):
             self.attendance_tracker.clear_all_data()
-            
-            # Reset all UI variables
-            self.clear_session_data()
-            
-            # Reset video list and index
-            self.video_list = []
-            self.current_video_index = 0
-            self.video_path_var.set("")
-            self.video_list_var.set("No videos selected")
-            
-            # Reset status
             self.current_session_var.set("Auto-managed")
             self.people_in_session_var.set("0 people")
-            self.status_var.set("All data cleared - ready for fresh start with new videos")
-            
-            # Clear video display
-            self.video_label.config(image='', text="No video loaded", background="black", foreground="white")
-            
-            print("🗑️ ALL DATA CLEARED - Starting completely fresh")
-            messagebox.showinfo("Data Cleared", "ALL previous session data has been completely cleared.\nYou can now upload new videos and start fresh.")
+            self.status_var.set("All attendance data cleared - ready for fresh start")
+            messagebox.showinfo("Data Cleared", "All attendance data has been cleared.\nYou can now start fresh with new videos.")
     
+    def tk_error_handler(self, exc, val, tb):
+        """Global Tkinter callback exception handler - keep app running"""
+        try:
+            print(f"Tkinter callback error: {exc}: {val}")
+            if hasattr(self, 'status_var'):
+                self.status_var.set("An internal error occurred; window will remain open")
+            messagebox.showerror("Unexpected Error", f"{exc.__name__}: {val}\n\nThe application will remain open.")
+        except Exception:
+            # Ensure no secondary crash in handler
+            pass
     
     def on_closing(self):
-        """Handle window closing"""
-        if self.is_processing:
-            self.stop_processing()
-        
-        # End current session if active
-        if self.attendance_tracker.current_session_id:
-            self.attendance_tracker.end_session()
-        
-        # Clean up resources
-        if self.cap is not None:
-            try:
+        """Handle window closing - ask for confirmation"""
+        if messagebox.askyesno("Exit Application", "Are you sure you want to close the application?\nThis will stop all processing and close the window."):
+            if self.is_processing:
+                self.stop_processing()
+            
+            # End current session if active
+            if self.attendance_tracker.current_session_id:
+                self.attendance_tracker.end_session()
+            
+            # Clean up resources
+            if self.cap is not None:
                 self.cap.release()
-            except:
-                pass
-        
-        # Ask for confirmation before closing
-        if messagebox.askokcancel("Quit", "Do you want to quit the application?"):
+            
+            # Destroy the window
             self.root.destroy()
-        else:
-            # Don't close, just minimize or continue
-            self.root.iconify()
     
     def run(self):
         """Run the application"""
-        try:
-            # Set up error handling for the main loop
-            self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-            
-            # Start the main loop with error handling
-            self.root.mainloop()
-        except KeyboardInterrupt:
-            print("\nApplication interrupted by user")
-            self.on_closing()
-        except Exception as e:
-            print(f"⚠️ Error in main loop (continuing): {e}")
-            # Don't close the application, just log the error and continue
-            try:
-                self.root.mainloop()
-            except:
-                pass
+        self.root.mainloop()
 
 if __name__ == "__main__":
     app = SimpleVideoProcessor()

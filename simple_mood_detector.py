@@ -80,6 +80,39 @@ class SimpleStudentMoodAnalyzer:
         # Chaos detection parameters
         self.movement_threshold = 0.1
         self.noise_threshold = 30
+
+        # Throttled error logging to avoid terminal spam
+        self._last_error_log_time = 0.0
+        self._suppressed_error_count = 0
+        self._cascade_error_count = 0
+        self._cascade_error_window_start = time.time()
+
+    def _record_cascade_error(self, window_seconds: float = 30.0, max_errors: int = 5):
+        """Track cascade errors and auto-disable cascades if too frequent."""
+        now = time.time()
+        if (now - self._cascade_error_window_start) > window_seconds:
+            self._cascade_error_window_start = now
+            self._cascade_error_count = 0
+        self._cascade_error_count += 1
+        if self._cascade_error_count >= max_errors:
+            # Auto-disable cascades to prevent repeated cv2 errors
+            self.face_cascade = None
+            self.eye_cascade = None
+            self.smile_cascade = None
+            print("⚠️ Disabling OpenCV cascades due to repeated errors. Continuing without face-based mood detection.")
+
+    def _log_error_throttled(self, label: str, error: Exception, min_interval_seconds: float = 5.0):
+        """Log errors at most once per min_interval_seconds; count suppressed ones."""
+        now = time.time()
+        if (now - self._last_error_log_time) >= min_interval_seconds:
+            message = f"{label}: {error}"
+            if self._suppressed_error_count > 0:
+                message += f" (and {self._suppressed_error_count} more similar errors suppressed)"
+            print(message)
+            self._last_error_log_time = now
+            self._suppressed_error_count = 0
+        else:
+            self._suppressed_error_count += 1
         
     def detect_faces(self, frame, frame_count=0):
         """Detect faces in the frame"""
@@ -105,7 +138,8 @@ class SimpleStudentMoodAnalyzer:
             
             return faces, gray
         except Exception as e:
-            print(f"Error in face detection: {e}")
+            self._log_error_throttled("Error in face detection", e)
+            self._record_cascade_error()
             return [], None
     
     def detect_mood_from_face(self, face_roi, gray_roi):
@@ -115,10 +149,20 @@ class SimpleStudentMoodAnalyzer:
                 return "unknown"
             
             # Detect eyes
-            eyes = self.eye_cascade.detectMultiScale(gray_roi, 1.1, 3) if not self.eye_cascade.empty() else []
+            try:
+                eyes = self.eye_cascade.detectMultiScale(gray_roi, 1.1, 3) if not self.eye_cascade.empty() else []
+            except Exception as e:
+                self._log_error_throttled("Error in eye detect", e)
+                self._record_cascade_error()
+                eyes = []
             
             # Detect smiles
-            smiles = self.smile_cascade.detectMultiScale(gray_roi, 1.8, 20) if not self.smile_cascade.empty() else []
+            try:
+                smiles = self.smile_cascade.detectMultiScale(gray_roi, 1.8, 20) if not self.smile_cascade.empty() else []
+            except Exception as e:
+                self._log_error_throttled("Error in smile detect", e)
+                self._record_cascade_error()
+                smiles = []
             
             # Simple mood detection based on detected features
             if len(smiles) > 0:
@@ -135,7 +179,7 @@ class SimpleStudentMoodAnalyzer:
             else:
                 return "neutral"
         except Exception as e:
-            print(f"Error in mood detection: {e}")
+            self._log_error_throttled("Error in mood detection", e)
             return "unknown"
     
     def count_people(self, frame, frame_count=0):
@@ -425,7 +469,7 @@ class SimpleStudentMoodAnalyzer:
                 'overall_chaos': chaos_summary['overall_chaos']
             }
         except Exception as e:
-            print(f"Error in analyze_frame: {e}")
+            self._log_error_throttled("Error in analyze_frame", e)
             # Return safe default values
             return {
                 'moods': [],

@@ -252,3 +252,5 @@ class YOLODogDetector:
             'average_confidence': avg_confidence,
             'average_movement': avg_movement
         }
+
+

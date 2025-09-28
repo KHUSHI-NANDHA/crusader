@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Test video display functionality
-"""
-
 import cv2
 import numpy as np
 from simple_video_processor import SimpleVideoProcessor

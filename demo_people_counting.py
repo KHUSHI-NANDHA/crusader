@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Demo script to show people counting in action
-"""
-
 import cv2
 import numpy as np
 from simple_mood_detector import SimpleStudentMoodAnalyzer
