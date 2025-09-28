@@ -351,3 +351,12 @@ class AdvancedChaosDetector:
             info += f"\n✓ All clusters and individuals are calm\n"
         
         return info
+
+
+
+
+
+
+
+
+

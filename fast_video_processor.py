@@ -1,11 +1,10 @@
 import cv2
+import numpy as np
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
 from simple_mood_detector import SimpleStudentMoodAnalyzer
 import os
-import numpy as np
-import time
 from PIL import Image, ImageTk
 
 class FastVideoProcessor:

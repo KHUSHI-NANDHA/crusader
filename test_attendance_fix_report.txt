@@ -1,0 +1,26 @@
+📊 ATTENDANCE REPORT
+==================================================
+
+📚 Total Lectures: 5
+👥 Total People: 0
+
+👤 PERSON ATTENDANCE:
+------------------------------
+
+📚 LECTURE ATTENDANCE:
+------------------------------
+demo_people_counting: 0 people
+  People: 
+
+synthetic_test: 0 people
+  People: 
+
+realistic_test: 3 people
+  People: 
+
+realistic_test: 3 people
+  People: 
+
+test_lecture: 0 people
+  People: 
+

@@ -196,6 +196,12 @@ class YOLOHumanDetector:
             if person_data['is_chaotic']:
                 chaos_people.append(person_data)
         
+        # Debug: Print tracking info
+        if len(detections) > 0 and len(current_people) == 0:
+            print(f"⚠️ YOLO track_humans: {len(detections)} detections but 0 people tracked!")
+        elif len(detections) != len(current_people):
+            print(f"⚠️ YOLO track_humans: {len(detections)} detections but {len(current_people)} people tracked!")
+        
         # Update tracking data
         self.update_tracks(current_people)
         

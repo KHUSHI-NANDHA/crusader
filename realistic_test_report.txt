@@ -1,0 +1,26 @@
+📊 ATTENDANCE REPORT
+==================================================
+
+📚 Total Lectures: 4
+👥 Total People: 3
+
+👤 PERSON ATTENDANCE:
+------------------------------
+Person A: 1 lectures (25.0%)
+Person B: 1 lectures (25.0%)
+Person C: 1 lectures (25.0%)
+
+📚 LECTURE ATTENDANCE:
+------------------------------
+demo_people_counting: 0 people
+  People: 
+
+synthetic_test: 0 people
+  People: 
+
+realistic_test: 3 people
+  People: Person A, Person B, Person C
+
+realistic_test: 3 people
+  People: Person A, Person B, Person C
+

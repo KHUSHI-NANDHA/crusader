@@ -67,10 +67,15 @@ class SimpleStudentMoodAnalyzer:
         self.enhanced_chaos_analyzer = EnhancedChaosAnalyzer()
         self.advanced_chaos_detector = AdvancedChaosDetector()
         
+        # Activity classification parameters
+        self.activity_history = deque(maxlen=50)  # Store recent activity classifications
+        self.group_work_threshold = 0.2  # Minimum proximity for group work
+        self.structured_threshold = 0.4  # Threshold for structured activity
+        self.chaos_threshold = 0.6  # Threshold for distractive chaos
+        
         # Individual person tracking for chaos detection
         self.person_tracks = {}  # Track individual people and their chaos levels
         self.next_person_id = 0
-        self.chaos_threshold = 0.1  # Lower threshold for better detection
         
         # Chaos detection parameters
         self.movement_threshold = 0.1
@@ -234,7 +239,9 @@ class SimpleStudentMoodAnalyzer:
             # Update existing track
             self.person_tracks[best_match_id]['last_rect'] = face_rect
             self.person_tracks[best_match_id]['last_seen'] = 0
-            self.person_tracks[best_match_id]['chaos_history'].append(chaos_level)
+            if 'chaos_levels' not in self.person_tracks[best_match_id]:
+                self.person_tracks[best_match_id]['chaos_levels'] = deque(maxlen=10)
+            self.person_tracks[best_match_id]['chaos_levels'].append(chaos_level)
             return best_match_id
         else:
             # Create new track
@@ -243,7 +250,7 @@ class SimpleStudentMoodAnalyzer:
             self.person_tracks[person_id] = {
                 'last_rect': face_rect,
                 'last_seen': 0,
-                'chaos_history': deque([chaos_level], maxlen=10)
+                'chaos_levels': deque([chaos_level], maxlen=10)
             }
             return person_id
     
@@ -290,6 +297,29 @@ class SimpleStudentMoodAnalyzer:
                 
                 # Track people using YOLO
                 current_people, _ = self.yolo_detector.track_humans(detections, frame, prev_frame)
+                
+                # Debug: Print YOLO tracking info
+                if frame_count % 100 == 0:  # Print every 100 frames
+                    print(f"🔍 YOLO Tracking Debug - Frame {frame_count}:")
+                    print(f"   YOLO detections: {len(detections)}")
+                    print(f"   Tracked people: {len(current_people)}")
+                    if len(detections) > 0 and len(current_people) == 0:
+                        print("   ⚠️ WARNING: YOLO detected people but tracking returned 0 people!")
+                
+                # Fallback: If tracking failed but we have detections, create people manually
+                if len(detections) > 0 and len(current_people) == 0:
+                    print(f"🔧 Creating fallback people from {len(detections)} detections")
+                    current_people = []
+                    for i, detection in enumerate(detections):
+                        person_data = {
+                            'id': i,  # Simple ID assignment
+                            'rect': detection['bbox'],
+                            'confidence': detection['confidence'],
+                            'center': detection['center'],
+                            'chaos_level': 0.0,
+                            'is_chaotic': False
+                        }
+                        current_people.append(person_data)
                 
                 # Use advanced chaos detector for real chaos detection
                 current_people, clusters = self.advanced_chaos_detector.analyze_advanced_chaos(current_people, prev_frame, frame)
@@ -338,6 +368,16 @@ class SimpleStudentMoodAnalyzer:
             # Get enhanced activity summary
             activity_summary = self.enhanced_chaos_analyzer.get_activity_summary()
             
+            # Ensure all required keys exist in advanced_chaos_report
+            if 'chaos_people_count' not in advanced_chaos_report:
+                advanced_chaos_report['chaos_people_count'] = 0
+            if 'chaos_cluster_count' not in advanced_chaos_report:
+                advanced_chaos_report['chaos_cluster_count'] = 0
+            
+            # Classify activity type
+            activity_type = self.classify_activity_type(current_people, chaos_summary['overall_chaos'])
+            self.activity_history.append(activity_type)
+            
             # Store mood data
             self.mood_history.append({
                 'moods': moods,
@@ -348,6 +388,7 @@ class SimpleStudentMoodAnalyzer:
                 'individual_activities': individual_activities if 'individual_activities' in locals() else {},
                 'cluster_activities': cluster_activities if 'cluster_activities' in locals() else {},
                 'clusters': clusters if 'clusters' in locals() else [],
+                'activity_type': activity_type,
                 'timestamp': time.time()
             })
             
@@ -377,6 +418,8 @@ class SimpleStudentMoodAnalyzer:
                 'chaos_people_count': advanced_chaos_report['chaos_people_count'],
                 'chaos_cluster_count': advanced_chaos_report['chaos_cluster_count'],
                 'clusters': clusters if 'clusters' in locals() else [],
+                'activity_type': activity_type,
+                'activity_summary': self.get_activity_summary(),
                 'dominant_mood': self.get_dominant_mood(),
                 'average_people': self.get_average_people_count(),
                 'overall_chaos': chaos_summary['overall_chaos']
@@ -424,3 +467,173 @@ class SimpleStudentMoodAnalyzer:
         
         recent_chaos = [frame_data['chaos_level'] for frame_data in list(self.mood_history)[-10:]]
         return sum(recent_chaos) / len(recent_chaos) if recent_chaos else 0
+    
+    def reset_session(self):
+        """Reset all session data for fresh video processing"""
+        # Clear all history data
+        self.mood_history.clear()
+        self.people_count_history.clear()
+        self.activity_history.clear()
+        
+        # Reset tracking data
+        self.person_tracks = {}
+        self.next_person_id = 0
+        
+        # Reset chaos analyzers if they have reset methods
+        if hasattr(self, 'chaos_analyzer') and hasattr(self.chaos_analyzer, 'reset_session'):
+            self.chaos_analyzer.reset_session()
+        
+        if hasattr(self, 'enhanced_chaos_analyzer') and hasattr(self.enhanced_chaos_analyzer, 'reset_session'):
+            self.enhanced_chaos_analyzer.reset_session()
+        
+        if hasattr(self, 'advanced_chaos_detector') and hasattr(self.advanced_chaos_detector, 'reset_session'):
+            self.advanced_chaos_detector.reset_session()
+        
+        print("🔄 Analyzer session data reset for fresh start")
+    
+    def classify_activity_type(self, people_data, chaos_level):
+        """Classify the type of classroom activity based on people positions and chaos level"""
+        if not people_data:
+            return "no_activity"
+        
+        # Calculate group work indicators
+        group_work_score = self._calculate_group_work_score(people_data)
+        
+        # Calculate structured activity indicators
+        structured_score = self._calculate_structured_score(people_data, chaos_level)
+        
+        # Determine activity type
+        if chaos_level > self.chaos_threshold:
+            if group_work_score > 0.5:
+                return "distractive_group_chaos"
+            else:
+                return "distractive_individual_chaos"
+        elif group_work_score > self.group_work_threshold:
+            if structured_score > self.structured_threshold:
+                return "structured_group_work"
+            else:
+                return "unstructured_group_work"
+        else:
+            if structured_score > self.structured_threshold:
+                return "structured_individual_work"
+            else:
+                return "unstructured_individual_work"
+    
+    def _calculate_group_work_score(self, people_data):
+        """Calculate how likely people are working in groups based on proximity"""
+        if len(people_data) < 2:
+            return 0.0
+        
+        group_score = 0.0
+        total_pairs = 0
+        
+        for i, person1 in enumerate(people_data):
+            for j, person2 in enumerate(people_data[i+1:], i+1):
+                # Calculate distance between people
+                x1, y1, w1, h1 = person1['rect']
+                x2, y2, w2, h2 = person2['rect']
+                
+                # Calculate center points
+                center1 = (x1 + w1/2, y1 + h1/2)
+                center2 = (x2 + w2/2, y2 + h2/2)
+                
+                distance = np.sqrt((center1[0] - center2[0])**2 + (center1[1] - center2[1])**2)
+                
+                # Normalize distance (assuming frame is roughly 640x480)
+                normalized_distance = distance / 500.0
+                
+                # Closer people = higher group work score
+                if normalized_distance < 0.2:  # Very close
+                    group_score += 1.0
+                elif normalized_distance < 0.4:  # Close
+                    group_score += 0.7
+                elif normalized_distance < 0.6:  # Moderate
+                    group_score += 0.3
+                
+                total_pairs += 1
+        
+        return group_score / total_pairs if total_pairs > 0 else 0.0
+    
+    def _calculate_structured_score(self, people_data, chaos_level):
+        """Calculate how structured the activity appears to be"""
+        if not people_data:
+            return 0.0
+        
+        # Factors that indicate structured activity:
+        # 1. Low chaos level
+        # 2. People are relatively stationary (low movement)
+        # 3. People are facing similar directions (if we can detect orientation)
+        # 4. People are distributed evenly in space
+        
+        structured_score = 0.0
+        
+        # Chaos level factor (lower chaos = more structured)
+        chaos_factor = 1.0 - min(chaos_level, 1.0)
+        structured_score += chaos_factor * 0.4
+        
+        # Movement factor (less movement = more structured)
+        movement_scores = []
+        for person in people_data:
+            if 'last_rect' in person and 'last_seen' in person:
+                # Calculate movement since last frame
+                current_rect = person['rect']
+                last_rect = person['last_rect']
+                
+                # Calculate center movement
+                current_center = (current_rect[0] + current_rect[2]/2, current_rect[1] + current_rect[3]/2)
+                last_center = (last_rect[0] + last_rect[2]/2, last_rect[1] + last_rect[3]/2)
+                
+                movement = np.sqrt((current_center[0] - last_center[0])**2 + (current_center[1] - last_center[1])**2)
+                movement_scores.append(movement)
+        
+        if movement_scores:
+            avg_movement = np.mean(movement_scores)
+            movement_factor = max(0, 1.0 - (avg_movement / 50.0))  # Normalize movement
+            structured_score += movement_factor * 0.3
+        
+        # Distribution factor (even distribution = more structured)
+        if len(people_data) > 1:
+            # Calculate how evenly distributed people are
+            x_positions = [p['rect'][0] + p['rect'][2]/2 for p in people_data]
+            y_positions = [p['rect'][1] + p['rect'][3]/2 for p in people_data]
+            
+            x_variance = np.var(x_positions)
+            y_variance = np.var(y_positions)
+            
+            # Moderate variance indicates good distribution
+            distribution_factor = min(1.0, (x_variance + y_variance) / 10000.0)
+            structured_score += distribution_factor * 0.3
+        
+        return min(structured_score, 1.0)
+    
+    def get_activity_summary(self):
+        """Get a summary of recent activity types"""
+        if not self.activity_history:
+            return {
+                'structured_group_work': 0,
+                'unstructured_group_work': 0,
+                'structured_individual_work': 0,
+                'unstructured_individual_work': 0,
+                'distractive_group_chaos': 0,
+                'distractive_individual_chaos': 0,
+                'no_activity': 0,
+                'total_periods': 0
+            }
+        
+        activity_counts = {}
+        for activity in self.activity_history:
+            activity_counts[activity] = activity_counts.get(activity, 0) + 1
+        
+        total_periods = len(self.activity_history)
+        
+        # Calculate percentages
+        summary = {}
+        for activity_type in ['structured_group_work', 'unstructured_group_work', 
+                             'structured_individual_work', 'unstructured_individual_work',
+                             'distractive_group_chaos', 'distractive_individual_chaos', 'no_activity']:
+            count = activity_counts.get(activity_type, 0)
+            summary[activity_type] = count
+            summary[f'{activity_type}_percentage'] = (count / total_periods) * 100 if total_periods > 0 else 0
+        
+        summary['total_periods'] = total_periods
+        return summary

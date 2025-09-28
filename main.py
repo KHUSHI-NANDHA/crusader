@@ -1,28 +1,5 @@
-#!/usr/bin/env python3
-"""
-Student Mood & Chaos Detection System
-=====================================
-
-A real-time video analysis system that detects:
-- Student moods (happy, excited, calm, sad, neutral)
-- People count in the video
-- Chaos level based on movement and activity
-- Overall classroom atmosphere
-
-Usage:
-    python main.py
-
-Features:
-- Real-time video processing
-- Multiple mood detection
-- People counting
-- Chaos level analysis
-- Simple GUI interface
-- Support for MP4 videos
-"""
 
 import sys
-import os
 from simple_video_processor import SimpleVideoProcessor
 
 def main():
