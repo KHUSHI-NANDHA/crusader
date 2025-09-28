@@ -71,7 +71,7 @@ class SimpleStudentMoodAnalyzer:
         self.activity_history = deque(maxlen=50)  # Store recent activity classifications
         self.group_work_threshold = 0.2  # Minimum proximity for group work
         self.structured_threshold = 0.4  # Threshold for structured activity
-        self.chaos_threshold = 0.6  # Threshold for distractive chaos
+        self.chaos_threshold = 0.6  # Threshold for distractive chaos (18 on 1-30 scale)
         
         # Individual person tracking for chaos detection
         self.person_tracks = {}  # Track individual people and their chaos levels
@@ -504,6 +504,18 @@ class SimpleStudentMoodAnalyzer:
             return 0
         return sum(self.people_count_history) / len(self.people_count_history)
     
+    def set_chaos_threshold_scale(self, scale_value: int):
+        """Set chaos threshold from a 1-30 scale (e.g., 16-18 is where chaos is detected).
+        Maps 1..30 -> 0..1 used internally.
+        """
+        try:
+            value = int(scale_value)
+        except Exception:
+            value = 18
+        value = max(1, min(30, value))
+        self.chaos_threshold = value / 30.0
+        return self.chaos_threshold
+
     def get_overall_chaos_level(self):
         """Get overall chaos level from recent frames"""
         if not self.mood_history:

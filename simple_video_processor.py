@@ -96,6 +96,24 @@ class SimpleVideoProcessor:
         mood_label = ttk.Label(results_frame, textvariable=self.mood_var, font=("Arial", 14, "bold"))
         mood_label.grid(row=1, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
         
+        # Chaos threshold slider (1-30)
+        ttk.Label(results_frame, text="Chaos Threshold (1-30):").grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
+        self.chaos_threshold_var = tk.IntVar(value=18)
+        def _on_threshold_change(value):
+            self.analyzer.set_chaos_threshold_scale(int(float(value)))
+        threshold_slider = ttk.Scale(results_frame, from_=1, to=30, orient=tk.HORIZONTAL, command=_on_threshold_change)
+        threshold_slider.set(self.chaos_threshold_var.get())
+        threshold_slider.grid(row=2, column=1, sticky=(tk.W, tk.E), padx=(10, 0), pady=(10, 0))
+        
+        # Minimal chaos indicators (side text only)
+        ttk.Label(results_frame, text="Chaos Detected:").grid(row=3, column=0, sticky=tk.W, pady=(10, 0))
+        self.chaos_detected_var = tk.StringVar(value="No")
+        ttk.Label(results_frame, textvariable=self.chaos_detected_var, font=("Arial", 12, "bold")).grid(row=3, column=1, sticky=tk.W, padx=(10, 0), pady=(10, 0))
+        
+        ttk.Label(results_frame, text="Chaotic People:").grid(row=4, column=0, sticky=tk.W)
+        self.chaotic_people_count_var = tk.StringVar(value="0")
+        ttk.Label(results_frame, textvariable=self.chaotic_people_count_var, font=("Arial", 12, "bold"), foreground="red").grid(row=4, column=1, sticky=tk.W, padx=(10, 0))
+        
         # Advanced/chaos/activity widgets (created but optionally hidden)
         chaos_status_label_text = ttk.Label(results_frame, text="Chaos Status:")
         chaos_status_label_text.grid(row=2, column=0, sticky=tk.W, pady=(10, 0))
@@ -578,6 +596,13 @@ class SimpleVideoProcessor:
         """Update UI with analysis results"""
         self.people_count_var.set(str(analysis['people_count']))
         self.mood_var.set(analysis['dominant_mood'].upper())
+        # Minimal indicators
+        chaotic_people = analysis.get('chaos_people_count', 0)
+        self.chaotic_people_count_var.set(str(chaotic_people))
+        # Determine chaos detected flag using current analyzer threshold
+        overall = analysis.get('overall_chaos', 0)
+        chaos_detected = overall > getattr(self.analyzer, 'chaos_threshold', 0.6) or chaotic_people > 0
+        self.chaos_detected_var.set("Yes" if chaos_detected else "No")
         if not self.minimal_ui:
             chaos_status = analysis.get('overall_chaos_status', 'ANALYZING')
             self.chaos_status_var.set(chaos_status)
